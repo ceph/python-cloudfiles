@@ -136,6 +136,16 @@ class Connection(object):
             path = '%s?%s' % (path, urlencode(parms))
         return path
 
+    def _construct_headers(self, hdrs, data):
+        """
+        Construct headers for http request.
+        """
+        headers = {'Content-Length': str(len(data)),
+                   'User-Agent': self.user_agent,
+                   'X-Auth-Token': self.token}
+        isinstance(hdrs, dict) and headers.update(hdrs)
+        return headers
+
     def cdn_request(self, method, path=[], data='', hdrs=None):
         """
         Given a method (i.e. GET, PUT, POST, etc), a path, data, header and
@@ -145,12 +155,7 @@ class Connection(object):
             raise CDNNotEnabled()
 
         path = self._construct_path(path)
-        headers = {'Content-Length': str(len(data)),
-                   'User-Agent': self.user_agent,
-                   'X-Auth-Token': self.token}
-        if isinstance(hdrs, dict):
-            headers.update(hdrs)
-
+        headers = self._construct_headers(hdrs, data)
         def retry_request():
             '''Re-connect and re-try a failed request once'''
             self.cdn_connect()
@@ -176,11 +181,7 @@ class Connection(object):
         performs an http request.
         """
         path = self._construct_path(path, parms)
-
-        headers = {'Content-Length': str(len(data)),
-                   'User-Agent': self.user_agent,
-                   'X-Auth-Token': self.token}
-        isinstance(hdrs, dict) and headers.update(hdrs)
+        headers = self._construct_headers(hdrs, data)
 
         def retry_request():
             '''Re-connect and re-try a failed request once'''

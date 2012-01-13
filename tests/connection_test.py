@@ -96,6 +96,32 @@ class ConnectionTest(unittest.TestCase):
                           uri + 'yougivelove?also=fun&abad=name')
 
     @printdoc
+    def test_construct_header(self):
+        """
+        Test _construct_header.
+        """
+        self._test_construct_header()
+        self._test_construct_header(hdrs={'hello': 'world'})
+        self._test_construct_header(data='yougivelove abadname')
+        self._test_construct_header(hdrs={'X-Awesome': 'gnarly',
+            'Retry': 'now'}, data='yougivelove abadname')
+
+    def _test_construct_header(self, hdrs={}, data=''):
+        """
+        Helper function for test_construct_header.
+        """
+        headers = self.conn._construct_headers(hdrs, data)
+
+        self.assertEquals(len(headers), 3 + len(hdrs))
+        self.assertEquals(headers['Content-Length'], str(len(data)))
+        self.assertEquals(headers['User-Agent'], self.conn.user_agent)
+        self.assertEquals(headers['X-Auth-Token'], self.conn.token)
+
+        for k, v in hdrs.iteritems():
+            self.assertEquals(headers[k], v)
+
+
+    @printdoc
     def test_servicenet_cnx(self):
         """
         Test connection to servicenet.
