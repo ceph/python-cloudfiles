@@ -79,6 +79,23 @@ class ConnectionTest(unittest.TestCase):
         self.assert_(self.conn.get_info()[0] == 3)
     
     @printdoc
+    def test_construct_path(self):
+        """
+        Test _construct_path.
+        """
+        uri = '/' + self.conn.uri.rstrip('/') + '/'
+        self.assertEquals(self.conn._construct_path(''), uri)
+        self.assertEquals(self.conn._construct_path(['bucket']),
+                          uri + 'bucket')
+        self.assertEquals(self.conn._construct_path(['bucket', 'object']),
+                          uri + 'bucket/object')
+        self.assertEquals(self.conn._construct_path('', {'param': 'value'}),
+                          uri + '?param=value')
+        self.assertEquals(self.conn._construct_path(['yougivelove'],
+                          {'abad': 'name', 'also': 'fun'}),
+                          uri + 'yougivelove?also=fun&abad=name')
+
+    @printdoc
     def test_servicenet_cnx(self):
         """
         Test connection to servicenet.

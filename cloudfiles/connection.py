@@ -125,6 +125,17 @@ class Connection(object):
                                               timeout=self.timeout)
         self.connection.set_debuglevel(self.debuglevel)
 
+
+    def _construct_path(self, path, parms=None):
+        """
+        Construct path for http request.
+        """
+        path = '/%s/%s' % \
+                 (self.uri.rstrip('/'), '/'.join([unicode_quote(i) for i in path]))
+        if isinstance(parms, dict) and parms:
+            path = '%s?%s' % (path, urlencode(parms))
+        return path
+
     def cdn_request(self, method, path=[], data='', hdrs=None):
         """
         Given a method (i.e. GET, PUT, POST, etc), a path, data, header and
@@ -133,8 +144,7 @@ class Connection(object):
         if not self.cdn_enabled:
             raise CDNNotEnabled()
 
-        path = '/%s/%s' % \
-                 (self.uri.rstrip('/'), '/'.join([unicode_quote(i) for i in path]))
+        path = self._construct_path(path)
         headers = {'Content-Length': str(len(data)),
                    'User-Agent': self.user_agent,
                    'X-Auth-Token': self.token}
@@ -165,11 +175,7 @@ class Connection(object):
         metadata dicts, and an optional dictionary of query parameters,
         performs an http request.
         """
-        path = '/%s/%s' % \
-                 (self.uri.rstrip('/'), '/'.join([unicode_quote(i) for i in path]))
-
-        if isinstance(parms, dict) and parms:
-            path = '%s?%s' % (path, urlencode(parms))
+        path = self._construct_path(path, parms)
 
         headers = {'Content-Length': str(len(data)),
                    'User-Agent': self.user_agent,
