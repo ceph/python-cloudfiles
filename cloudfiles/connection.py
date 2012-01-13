@@ -169,12 +169,10 @@ class Connection(object):
         def retry_request():
             '''Re-connect and re-try a failed request once'''
             connect_fn()
-            connection().request(method, path, data, headers)
-            return connection().getresponse()
+            return self._try_request(connection(), method, path, data, headers)
 
         try:
-            connection().request(method, path, data, headers)
-            response = connection().getresponse()
+            response = self._try_request(connection(), method, path, data, headers)
         except (socket.error, IOError, HTTPException):
             response = retry_request()
         if response.status == 401:
@@ -183,6 +181,11 @@ class Connection(object):
             response = retry_request()
 
         return response
+
+    def _try_request(self, connection, method, path, data, headers):
+        '''Actual http request logic'''
+        connection.request(method, path, data, headers)
+        return connection.getresponse()
 
     def get_info(self):
         """
