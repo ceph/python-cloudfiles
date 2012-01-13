@@ -92,6 +92,16 @@ class ConnectionTest(unittest.TestCase):
         self.conn.list_containers()
         self.assert_(socket.getdefaulttimeout() == 21.0)
 
+    @printdoc
+    def test_http_connect(self):
+        # test default timeout
+        self.conn.http_connect()
+        self.assertEquals(self.conn.connection.timeout, self.conn.timeout)
+
+        # test setting a timeout
+        self.conn.http_connect(60)
+        self.assertEquals(self.conn.connection.timeout, 60)
+
     def setUp(self):
         self.auth = Auth('jsmith', 'qwerty')
         self.conn = Connection(auth=self.auth)

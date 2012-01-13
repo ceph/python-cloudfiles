@@ -108,21 +108,25 @@ class Connection(object):
             return "https://snet-%s" % url.replace("https://", "")
         return url
 
-    def cdn_connect(self):
+    def cdn_connect(self, timeout=None):
         """
         Setup the http connection instance for the CDN service.
         """
+        if timeout is None:
+            timeout = self.timeout
+
         (host, port, cdn_uri, is_ssl) = parse_url(self.cdn_url)
-        self.cdn_connection = self.conn_class(host, port, timeout=self.timeout)
+        self.cdn_connection = self.conn_class(host, port, timeout=timeout)
         self.cdn_enabled = True
 
-    def http_connect(self):
+    def http_connect(self, timeout=None):
         """
         Setup the http connection instance.
         """
+        if timeout is None:
+            timeout = self.timeout
         (host, port, self.uri, is_ssl) = self.connection_args
-        self.connection = self.conn_class(host, port=port, \
-                                              timeout=self.timeout)
+        self.connection = self.conn_class(host, port=port, timeout=timeout)
         self.connection.set_debuglevel(self.debuglevel)
 
     def cdn_request(self, method, path=[], data='', hdrs=None):
@@ -166,26 +170,34 @@ class Connection(object):
                    'X-Auth-Token': self.token}
         isinstance(hdrs, dict) and headers.update(hdrs)
 
-        def retry_request():
-            '''Re-connect and re-try a failed request once'''
-            connect_fn()
-            return self._try_request(connection(), method, path, data, headers)
-
-        try:
-            response = self._try_request(connection(), method, path, data, headers)
-        except (socket.error, IOError, HTTPException):
-            response = retry_request()
+        for tries in range(6):
+            try:
+                response = self._try_request(connect_fn, connection, method,
+                        path, data, headers, timeout=self.timeout * (2 **
+                        tries))
+                break
+            except (socket.error, IOError, HTTPException):
+                if tries == 5:
+                    raise
         if response.status == 401:
             self._authenticate()
             headers['X-Auth-Token'] = self.token
-            response = retry_request()
+            response = self._try_request(connect_fn, connection, method, path,
+                    data, headers)
 
         return response
 
-    def _try_request(self, connection, method, path, data, headers):
-        '''Actual http request logic'''
-        connection.request(method, path, data, headers)
-        return connection.getresponse()
+    def _try_request(self, connect_fn, connection, method, path, data, headers,
+            timeout=None):
+        '''
+        Actual http request logic. We create a new connect default to the class
+        default timeout.
+        '''
+        if timeout is None:
+            timeout = self.timeout
+        connect_fn(timeout)
+        connection().request(method, path, data, headers)
+        return connection().getresponse()
 
     def get_info(self):
         """
