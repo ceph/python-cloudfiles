@@ -127,43 +127,33 @@ class Connection(object):
 
     def cdn_request(self, method, path=[], data='', hdrs=None):
         """
-        Given a method (i.e. GET, PUT, POST, etc), a path, data, header and
-        metadata dicts, performs an http request against the CDN service.
+        Uses _make_request to make an http request against the CDN service by
+        passing http_connect and connection.
         """
         if not self.cdn_enabled:
             raise CDNNotEnabled()
 
-        path = '/%s/%s' % \
-                 (self.uri.rstrip('/'), '/'.join([unicode_quote(i) for i in path]))
-        headers = {'Content-Length': str(len(data)),
-                   'User-Agent': self.user_agent,
-                   'X-Auth-Token': self.token}
-        if isinstance(hdrs, dict):
-            headers.update(hdrs)
-
-        def retry_request():
-            '''Re-connect and re-try a failed request once'''
-            self.cdn_connect()
-            self.cdn_connection.request(method, path, data, headers)
-            return self.cdn_connection.getresponse()
-
-        try:
-            self.cdn_connection.request(method, path, data, headers)
-            response = self.cdn_connection.getresponse()
-        except (socket.error, IOError, HTTPException):
-            response = retry_request()
-        if response.status == 401:
-            self._authenticate()
-            headers['X-Auth-Token'] = self.token
-            response = retry_request()
-
-        return response
+        return self._make_request(method, self.cdn_connect, \
+                    lambda: self.cdn_connection, path=path, \
+                    data=data, hdrs=hdrs)
 
     def make_request(self, method, path=[], data='', hdrs=None, parms=None):
+        """
+        Uses _make_request to make an http request by passing http_connect and
+        connection.
+        """
+        return self._make_request(method, self.http_connect, \
+                    lambda: self.connection, path=path, data=data, \
+                    hdrs=hdrs, parms=parms)
+
+    def _make_request(self, method, connect_fn, connection, path=[], data='', hdrs=None, parms=None):
         """
         Given a method (i.e. GET, PUT, POST, etc), a path, data, header and
         metadata dicts, and an optional dictionary of query parameters,
         performs an http request.
+
+        It takes a connection function (connect_fn) for retrying the request. It
+        takes a function to get the connection object to get self's correct one.
         """
         path = '/%s/%s' % \
                  (self.uri.rstrip('/'), '/'.join([unicode_quote(i) for i in path]))
@@ -178,13 +168,13 @@ class Connection(object):
 
         def retry_request():
             '''Re-connect and re-try a failed request once'''
-            self.http_connect()
-            self.connection.request(method, path, data, headers)
-            return self.connection.getresponse()
+            connect_fn()
+            connection().request(method, path, data, headers)
+            return connection().getresponse()
 
         try:
-            self.connection.request(method, path, data, headers)
-            response = self.connection.getresponse()
+            connection().request(method, path, data, headers)
+            response = connection().getresponse()
         except (socket.error, IOError, HTTPException):
             response = retry_request()
         if response.status == 401:
