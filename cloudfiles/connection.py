@@ -164,8 +164,8 @@ class Connection(object):
     def _try_request(self, connect_fn, connection, method, path, data,
             headers):
         """
-        Given a method (i.e. GET, PUT, POST, etc), a path, data, header and
-        metadata dicts, performs an http request.
+        Sets up and makes an http request. This is usually called by
+        _make_request.
 
         connect_fn is the function used to create a new HTTPConnection object.
 
@@ -187,28 +187,40 @@ class Connection(object):
 
         return response
 
-    def cdn_request(self, method, path=[], data='', hdrs=None):
+    def _make_request(self, connect_fn, connection, method, path=[], data='',
+            hdrs=None, parms=None):
         """
-        Performs an http request against the CDN service using _try_request.
-        """
-        if not self.cdn_enabled:
-            raise CDNNotEnabled()
+        Given a method (i.e. GET, PUT, POST, etc), a path, data, header and
+        metadata dicts, performs an http request using _try_request.
 
-        path = self._construct_path(path)
-        headers = self._construct_headers(hdrs, data)
+        connect_fn is the function used to create a new HTTPConnection object.
 
-        return self._try_request(self.cdn_connect, lambda: self.cdn_connection,
-                method, path, data, headers)
-
-    def make_request(self, method, path=[], data='', hdrs=None, parms=None):
-        """
-        Performs an http request using _try_request.
+        connection is a function that returns the appropriate HTTPConnection
+        object. Asking for a function rather than the object itself prevents
+        using a stale object after creating a new one.
         """
         path = self._construct_path(path, parms)
         headers = self._construct_headers(hdrs, data)
 
-        return self._try_request(self.http_connect, lambda: self.connection,
-                method, path, data, headers)
+        return self._try_request(connect_fn, connection, method, path, data,
+                headers)
+
+    def cdn_request(self, method, path=[], data='', hdrs=None):
+        """
+        Performs an http request against the CDN service using _make_request.
+        """
+        if not self.cdn_enabled:
+            raise CDNNotEnabled()
+
+        return self._make_request(self.cdn_connect, lambda: self.cdn_connection,
+                method, path=path, data=data, hdrs=hdrs)
+
+    def make_request(self, method, path=[], data='', hdrs=None, parms=None):
+        """
+        Performs an http request using _make_request.
+        """
+        return self._make_request(self.http_connect, lambda: self.connection,
+                method, path=path, data=data, hdrs=hdrs, parms=parms)
 
     def get_info(self):
         """
