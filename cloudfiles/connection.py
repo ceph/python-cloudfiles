@@ -161,10 +161,35 @@ class Connection(object):
         connection().request(method, path, data, headers)
         return connection().getresponse()
 
-    def cdn_request(self, method, path=[], data='', hdrs=None):
+    def _try_request(self, connect_fn, connection, method, path, data,
+            headers):
         """
         Given a method (i.e. GET, PUT, POST, etc), a path, data, header and
-        metadata dicts, performs an http request against the CDN service.
+        metadata dicts, performs an http request.
+
+        connect_fn is the function used to create a new HTTPConnection object.
+
+        connection is a function that returns the appropriate HTTPConnection
+        object. Asking for a function rather than the object itself prevents
+        using a stale object after creating a new one.
+        """
+        try:
+            connection().request(method, path, data, headers)
+            response = connection().getresponse()
+        except (socket.error, IOError, HTTPException):
+            response = self._retry_request(connect_fn, connection, method, path,
+                    data, headers)
+        if response.status == 401:
+            self._authenticate()
+            headers['X-Auth-Token'] = self.token
+            response = self._retry_request(connect_fn, connection, method, path,
+                    data, headers)
+
+        return response
+
+    def cdn_request(self, method, path=[], data='', hdrs=None):
+        """
+        Performs an http request against the CDN service using _try_request.
         """
         if not self.cdn_enabled:
             raise CDNNotEnabled()
@@ -172,42 +197,18 @@ class Connection(object):
         path = self._construct_path(path)
         headers = self._construct_headers(hdrs, data)
 
-        try:
-            self.cdn_connection.request(method, path, data, headers)
-            response = self.cdn_connection.getresponse()
-        except (socket.error, IOError, HTTPException):
-            response = self._retry_request(self.cdn_connect,
-                    lambda: self.cdn_connection, method, path, data, headers)
-        if response.status == 401:
-            self._authenticate()
-            headers['X-Auth-Token'] = self.token
-            response = self._retry_request(self.cdn_connect,
-                    lambda: self.cdn_connection, method, path, data, headers)
-
-        return response
+        return self._try_request(self.cdn_connect, lambda: self.cdn_connection,
+                method, path, data, headers)
 
     def make_request(self, method, path=[], data='', hdrs=None, parms=None):
         """
-        Given a method (i.e. GET, PUT, POST, etc), a path, data, header and
-        metadata dicts, and an optional dictionary of query parameters,
-        performs an http request.
+        Performs an http request using _try_request.
         """
         path = self._construct_path(path, parms)
         headers = self._construct_headers(hdrs, data)
 
-        try:
-            self.connection.request(method, path, data, headers)
-            response = self.connection.getresponse()
-        except (socket.error, IOError, HTTPException):
-            response = self._retry_request(self.http_connect,
-                    lambda: self.connection, method, path, data, headers)
-        if response.status == 401:
-            self._authenticate()
-            headers['X-Auth-Token'] = self.token
-            response = self._retry_request(self.http_connect,
-                    lambda: self.connection, method, path, data, headers)
-
-        return response
+        return self._try_request(self.http_connect, lambda: self.connection,
+                method, path, data, headers)
 
     def get_info(self):
         """
