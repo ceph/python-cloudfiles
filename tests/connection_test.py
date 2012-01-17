@@ -1,4 +1,5 @@
 import unittest
+from httplib    import HTTPResponse
 from misc       import printdoc
 from fakehttp   import CustomHTTPConnection
 from cloudfiles import Connection, Container
@@ -120,6 +121,16 @@ class ConnectionTest(unittest.TestCase):
         for k, v in hdrs.iteritems():
             self.assertEquals(headers[k], v)
 
+    @printdoc
+    def test_retry_request(self):
+        """
+        Test _retry_request.
+        """
+        response = self.conn._retry_request(self.conn.http_connect,
+                lambda: self.conn.connection, 'GET',
+                self.conn._construct_path(''), '',
+                self.conn._construct_headers(None, ''))
+        self.assert_(isinstance(response, HTTPResponse))
 
     @printdoc
     def test_servicenet_cnx(self):

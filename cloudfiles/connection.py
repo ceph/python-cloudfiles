@@ -146,6 +146,21 @@ class Connection(object):
         isinstance(hdrs, dict) and headers.update(hdrs)
         return headers
 
+    def _retry_request(self, connect_fn, connection, method, path, data,
+            headers):
+        """
+        Re-connect and re-try a failed request once.
+
+        connect_fn is the function used to create a new HTTPConnection object.
+
+        connection is a function that returns the appropriate HTTPConnection
+        object. Asking for a function rather than the object itself prevents
+        using a stale object after creating a new one.
+        """
+        connect_fn()
+        connection().request(method, path, data, headers)
+        return connection().getresponse()
+
     def cdn_request(self, method, path=[], data='', hdrs=None):
         """
         Given a method (i.e. GET, PUT, POST, etc), a path, data, header and
@@ -156,21 +171,18 @@ class Connection(object):
 
         path = self._construct_path(path)
         headers = self._construct_headers(hdrs, data)
-        def retry_request():
-            '''Re-connect and re-try a failed request once'''
-            self.cdn_connect()
-            self.cdn_connection.request(method, path, data, headers)
-            return self.cdn_connection.getresponse()
 
         try:
             self.cdn_connection.request(method, path, data, headers)
             response = self.cdn_connection.getresponse()
         except (socket.error, IOError, HTTPException):
-            response = retry_request()
+            response = self._retry_request(self.cdn_connect,
+                    lambda: self.cdn_connection, method, path, data, headers)
         if response.status == 401:
             self._authenticate()
             headers['X-Auth-Token'] = self.token
-            response = retry_request()
+            response = self._retry_request(self.cdn_connect,
+                    lambda: self.cdn_connection, method, path, data, headers)
 
         return response
 
@@ -183,21 +195,17 @@ class Connection(object):
         path = self._construct_path(path, parms)
         headers = self._construct_headers(hdrs, data)
 
-        def retry_request():
-            '''Re-connect and re-try a failed request once'''
-            self.http_connect()
-            self.connection.request(method, path, data, headers)
-            return self.connection.getresponse()
-
         try:
             self.connection.request(method, path, data, headers)
             response = self.connection.getresponse()
         except (socket.error, IOError, HTTPException):
-            response = retry_request()
+            response = self._retry_request(self.http_connect,
+                    lambda: self.connection, method, path, data, headers)
         if response.status == 401:
             self._authenticate()
             headers['X-Auth-Token'] = self.token
-            response = retry_request()
+            response = self._retry_request(self.http_connect,
+                    lambda: self.connection, method, path, data, headers)
 
         return response
 
