@@ -1,5 +1,5 @@
 import unittest
-from httplib    import HTTPResponse
+from httplib    import HTTPConnection, HTTPResponse
 from misc       import printdoc
 from fakehttp   import CustomHTTPConnection
 from cloudfiles import Connection, Container
@@ -122,15 +122,33 @@ class ConnectionTest(unittest.TestCase):
             self.assertEquals(headers[k], v)
 
     @printdoc
-    def test_retry_request(self):
+    def test_do_request(self):
         """
-        Test _retry_request.
+        Test _do_request.
         """
-        response = self.conn._retry_request(self.conn.http_connect,
+        response = self.conn._do_request(self.conn.http_connect,
                 lambda: self.conn.connection, 'GET',
                 self.conn._construct_path(''), '',
                 self.conn._construct_headers(None, ''))
         self.assert_(isinstance(response, HTTPResponse))
+
+    @printdoc
+    def test_http_connect(self):
+        # test default timeout
+        old_conn = self.conn.connection
+
+        self.conn.http_connect()
+        self.assertEquals(self.conn.connection.timeout, self.conn.timeout)
+
+        new_conn = self.conn.connection
+        self.assert_(isinstance(new_conn, HTTPConnection))
+
+        # new connection should be made
+        self.assert_(new_conn is not old_conn)
+
+        # test setting a timeout
+        self.conn.http_connect(60)
+        self.assertEquals(self.conn.connection.timeout, 60)
 
     @printdoc
     def test_servicenet_cnx(self):

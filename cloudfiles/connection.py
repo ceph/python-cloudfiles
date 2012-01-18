@@ -108,23 +108,25 @@ class Connection(object):
             return "https://snet-%s" % url.replace("https://", "")
         return url
 
-    def cdn_connect(self):
+    def cdn_connect(self, timeout=None):
         """
         Setup the http connection instance for the CDN service.
         """
+        if timeout is None:
+            timeout = self.timeout
         (host, port, cdn_uri, is_ssl) = parse_url(self.cdn_url)
-        self.cdn_connection = self.conn_class(host, port, timeout=self.timeout)
+        self.cdn_connection = self.conn_class(host, port, timeout=timeout)
         self.cdn_enabled = True
 
-    def http_connect(self):
+    def http_connect(self, timeout=None):
         """
         Setup the http connection instance.
         """
+        if timeout is None:
+            timeout = self.timeout
         (host, port, self.uri, is_ssl) = self.connection_args
-        self.connection = self.conn_class(host, port=port, \
-                                              timeout=self.timeout)
+        self.connection = self.conn_class(host, port=port, timeout=timeout)
         self.connection.set_debuglevel(self.debuglevel)
-
 
     def _construct_path(self, path, parms=None):
         """
@@ -146,10 +148,10 @@ class Connection(object):
         isinstance(hdrs, dict) and headers.update(hdrs)
         return headers
 
-    def _retry_request(self, connect_fn, connection, method, path, data,
-            headers):
+    def _do_request(self, connect_fn, connection, method, path, data,
+            headers, timeout=None):
         """
-        Re-connect and re-try a failed request once.
+        Create a new HTTPConnection and make an http request.
 
         connect_fn is the function used to create a new HTTPConnection object.
 
@@ -157,7 +159,9 @@ class Connection(object):
         object. Asking for a function rather than the object itself prevents
         using a stale object after creating a new one.
         """
-        connect_fn()
+        if timeout is None:
+            timeout = self.timeout
+        connect_fn(timeout)
         connection().request(method, path, data, headers)
         return connection().getresponse()
 
@@ -173,17 +177,20 @@ class Connection(object):
         object. Asking for a function rather than the object itself prevents
         using a stale object after creating a new one.
         """
-        try:
-            connection().request(method, path, data, headers)
-            response = connection().getresponse()
-        except (socket.error, IOError, HTTPException):
-            response = self._retry_request(connect_fn, connection, method, path,
-                    data, headers)
+        for tries in range(6):
+            try:
+                response = self._do_request(connect_fn, connection, method,
+                        path, data, headers, timeout=self.timeout * (2 **
+                            tries))
+                break
+            except (socket.error, IOError, HTTPException):
+                if tries == 5:
+                    raise
         if response.status == 401:
             self._authenticate()
             headers['X-Auth-Token'] = self.token
-            response = self._retry_request(connect_fn, connection, method, path,
-                    data, headers)
+            response = self._do_request(connect_fn, connection, method,
+                    path, data, headers)
 
         return response
 
